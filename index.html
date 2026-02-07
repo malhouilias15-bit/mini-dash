@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mini Dash - Neon Dash Clone</title>
+<style>
+body{margin:0;overflow:hidden;background:#222;font-family:sans-serif;}
+canvas{display:block;margin:auto;background:#333;}
+#ui,#editor,#menu{position:absolute;color:white;font-size:18px;}
+#ui{top:10px;left:10px;}
+#editor{bottom:10px;left:10px;font-size:16px;}
+#menu{top:50px;left:50%;transform:translateX(-50%);text-align:center;}
+button{font-size:16px;margin:5px;padding:5px;}
+input{margin:0 5px;}
+</style>
+</head>
+<body>
+<div id="menu">
+<h2>Welcome to Mini Dash</h2>
+<label>Cube Color: <input type="color" id="cubeColor" value="#4caf50"></label>
+<label>Custom Sprite URL: <input type="text" id="cubeSprite" placeholder="Leave blank for cube"></label><br><br>
+<div id="levelButtons"></div>
+<button id="editorBtn">Level Editor (E)</button>
+</div>
+<div id="ui"></div>
+<div id="editor">
+<button id="addBlockBtn">Add Blocks</button>
+<button id="addSpikeBtn">Add Spikes</button>
+<button id="eraseBtn">Erase</button>
+<span id="editorModeText">Editor Mode</span>
+</div>
+<canvas id="game"></canvas>
+<script>
+// ========== CANVAS & VARIABLES ==========
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+canvas.width=900; canvas.height=400;
+
+let gameState="menu"; // menu, editor, play
+let cubeColor="#4caf50";
+let cubeSprite=null;
+let selectedTool='addBlock';
+let mouseDown=false;
+
+document.getElementById('cubeColor').oninput=e=>cubeColor=e.target.value;
+document.getElementById('cubeSprite').onchange=e=>{
+    const url=e.target.value;
+    cubeSprite=url?new Image():null;
+    if(url){cubeSprite.src=url;}
+};
+
+// PLAYER
+let player={x:50,y:300,size:30,dy:0,gravity:0.8,jump:-15,onGround:true,mode:'cube',fly:false,doubleJump:false};
+
+// INPUT
+document.addEventListener('keydown',e=>{
+    if(e.code==='Space'){
+        if(player.mode==='cube'){
+            if(player.onGround){player.dy=player.jump;player.onGround=false;}
+            else if(player.doubleJump){player.dy=player.jump;player.doubleJump=false;}
+        } else if(player.mode==='UFO'){player.dy=-7;}
+    }
+    if(e.code==='KeyE') toggleEditor();
+});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('mousedown',e=>mouseDown=true);
+canvas.addEventListener('mouseup',e=>mouseDown=false);
+
+// ========== LEVELS ==========
+let levels=[
+{name:'Neon Warmup',difficulty:'Easy',length:3000,blocks:[],obstacles:[],portals:[],orbs:[]},
+{name:'Pulse Runner',difficulty:'Medium',length:4000,blocks:[],obstacles:[],portals:[],orbs:[]},
+{name:'Quantum Hop',difficulty:'Hard',length:5000,blocks:[],obstacles:[],portals:[],orbs:[]},
+{name:'Chromatic Caverns',difficulty:'Hard',length:5000,blocks:[],obstacles:[],portals:[],orbs:[]},
+{name:'Drift Zone',difficulty:'Hard+',length:5500,blocks:[],obstacles:[],portals:[],orbs:[]}
+];
+
+// AUTO-GENERATE DEMO BLOCKS AND SPIKES
+levels.forEach((lvl,i)=>{
+    for(let x=100;x<lvl.length;x+=220){
+        lvl.blocks.push({x:x,y:300,w:50,h:20,type:'safe'});
+        if(i>0 && Math.random()<0.5) lvl.obstacles.push({x:x+20,y:280,w:20,h:20,type:'spike'});
+    }
+    if(i>0) lvl.portals.push({x:lvl.length/2,type:'UFO',triggered:false});
+    lvl.portals.push({x:lvl.length-100,type:'END',triggered:false});
+});
+
+// ========== MENU ==========
+const levelButtonsDiv=document.getElementById('levelButtons');
+levels.forEach((lvl,i)=>{
+    const btn=document.createElement('button');
+    btn.innerText=`${lvl.name} (${lvl.difficulty})`;
+    btn.onclick=()=>startLevel(i);
+    levelButtonsDiv.appendChild(btn);
+});
+
+document.getElementById('editorBtn').onclick=()=>{gameState='editor';document.getElementById('menu').style.display='none';initEditor();};
+
+// ========== EDITOR ==========
+function toggleEditor(){gameState=gameState==='editor'?'play':'editor';}
+document.getElementById('addBlockBtn').onclick=()=>selectedTool='addBlock';
+document.getElementById('addSpikeBtn').onclick=()=>selectedTool='addSpike';
+document.getElementById('eraseBtn').onclick=()=>selectedTool='erase';
+canvas.addEventListener('click',e=>{
+    if(gameState!=='editor') return;
+    const rect=canvas.getBoundingClientRect();
+    const mx=e.clientX-rect.left+distance;
+    const my=e.clientY-rect.top;
+    if(selectedTool==='erase'){
+        blocks=blocks.filter(b=>!(mx>b.x&&mx<b.x+b.w&&my>b.y&&my< b.y+b.h));
+        obstacles=obstacles.filter(o=>!(mx>o.x&&mx<o.x+o.w&&my>o.y&&my<o.y+o.h));
+    } else if(selectedTool==='addBlock'){
+        blocks.push({x:mx,y:my,w:50,h:20,type:'safe'});
+    } else if(selectedTool==='addSpike'){
+        obstacles.push({x:mx,y:my,w:20,h:20,type:'spike'});
+    }
+});
+
+// ======== START LEVEL ========
+let distance=0,score=0,levelIndex=0;
+function startLevel(idx){
+    levelIndex=idx;
+    player.y=300;player.dy=0;player.fly=false;player.doubleJump=true;
+    distance=0;score=0;
+    gameState='play';
+    document.getElementById('menu').style.display='none';
+}
+
+// ========== GAME LOOP ==========
+function update(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(gameState==='editor'){
+        blocks.forEach(b=>{ctx.fillStyle='#555';ctx.fillRect(b.x-distance,b.y,b.w,b.h);});
+        obstacles.forEach(o=>{ctx.fillStyle='#f44336';ctx.fillRect(o.x-distance,o.y,o.w,o.h);});
+        ctx.fillStyle='white';ctx.fillText('Editor Mode: '+selectedTool,10,20);
+    } else if(gameState==='play'){
+        const lvl=levels[levelIndex];
+        // PHYSICS
+        if(player.fly){player.y+=player.dy;player.dy+=0.5;} else{player.dy+=player.gravity;player.y+=player.dy;}
+        if(player.y+player.size>canvas.height){player.y=canvas.height-player.size;player.dy=0;player.onGround=true;player.doubleJump=true;}
+        // DRAW BLOCKS & OBSTACLES
+        lvl.blocks.forEach(b=>{ctx.fillStyle='#555';ctx.fillRect(b.x-distance,b.y,b.w,b.h);});
+        lvl.obstacles.forEach(o=>{ctx.fillStyle='#f44336';ctx.fillRect(o.x-distance,o.y,o.w,o.h);});
+        // PORTALS
+        lvl.portals.forEach(p=>{
+            if(!p.triggered && player.x+player.size>p.x){p.triggered=true;
+                if(p.type==='UFO'){player.fly=true;player.dy=0;}
+                if(p.type==='END'){levelIndex++;if(levelIndex>=levels.length){alert('You beat Mini Dash!');location.reload();}else{startLevel(levelIndex);}}
+            }
+            ctx.beginPath();ctx.arc(p.x-distance+player.x,canvas.height-50,15,0,Math.PI*2);
+            ctx.fillStyle=(p.type==='UFO')?'#00f':'#0f0';ctx.fill();
+        });
+        // PLAYER
+        ctx.fillStyle=cubeColor;
+        if(cubeSprite) ctx.drawImage(cubeSprite,player.x,player.y,player.size,player.size);
+        else ctx.fillRect(player.x,player.y,player.size,player.size);
+        // COLLISION
+        lvl.obstacles.forEach(o=>{
+            if(player.x<o.x+o.w&&player.x+player.size>o.x&&player.y<o.y+o.h&&player.y+player.size>o.y){
+                alert('Game Over');location.reload();
+            }
+        });
+        distance+=5;score++;
+        document.getElementById('ui').innerText=`${lvl.name} | Score: ${score} | Progress: ${Math.min(100,Math.floor(distance/lvl.length*100))}%`;
+    }
+    requestAnimationFrame(update);
+}
+update();
+</script>
+</body>
+</html>
