@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Geometry Dash Clone - Full Version</title>
+<style>
+  body { margin:0; overflow:hidden; background:#222; font-family:sans-serif; }
+  canvas { display:block; margin:auto; background:#333; }
+  #ui { position:absolute; top:10px; left:10px; color:white; font-size:18px; }
+  #level { position:absolute; top:10px; right:10px; color:white; font-size:18px; }
+  #editor { position:absolute; bottom:10px; left:10px; color:white; font-size:14px; }
+</style>
+</head>
+<body>
+<div id="ui">Score: 0 | Progress: 0%</div>
+<div id="level">Level 1</div>
+<div id="editor">Editor: Click to add blocks (hold Shift to remove)</div>
+<canvas id="game"></canvas>
+<script>
+// ========== CORE GAME VARIABLES ==========
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 900;
+canvas.height = 400;
+
+let player = { x:50, y:300, size:30, dy:0, gravity:0.8, jump:-15, onGround:true, mode:'cube', shield:false, doubleJump:false };
+let obstacles = [];
+let portals = [];
+let orbs = [];
+let checkpoints = [];
+let speed = 5;
+let score = 0;
+let gameOver = false;
+let distance = 0;
+let levelLength = 5000;
+
+// LEVEL SETTINGS
+let editorMode = false;
+
+// ===== INPUT =====
+document.addEventListener('keydown', e=>{
+    if(e.code==='Space'){
+        if(player.mode==='cube'){
+            if(player.onGround){
+                player.dy = player.jump;
+                player.onGround=false;
+            } else if(player.doubleJump){
+                player.dy = player.jump;
+                player.doubleJump=false;
+            }
+        } else if(player.mode==='UFO'){
+            player.dy=-7;
+        }
+    }
+    if(e.code==='KeyE') editorMode = !editorMode; // toggle editor
+});
+
+// ===== LEVEL DESIGN FUNCTIONS =====
+function addObstacle(x,height){
+    obstacles.push({x:x, y:canvas.height-height, w:20, h:height, type:'spike'});
+}
+function addPortal(x,type){
+    portals.push({x:type==='END'?x:x, type:type, triggered:false});
+}
+function addOrb(x,y,type){ orbs.push({x,y,type}); }
+
+// SIMPLE LEVEL FOR DEMO
+for(let i=300;i<levelLength;i+=220){
+    addObstacle(i, Math.random()*60+30);
+}
+addPortal(levelLength/2,'UFO');
+addPortal(levelLength-100,'END');
+addOrb(400,250,'jump');
+
+// ======= GAME LOOP =======
+function update(){
+    if(gameOver) return;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // ===== PLAYER PHYSICS =====
+    if(player.mode==='cube'){
+        player.dy+=player.gravity;
+        player.y+=player.dy;
+        if(player.y+player.size>canvas.height){
+            player.y=canvas.height-player.size;
+            player.dy=0;
+            player.onGround=true;
+            player.doubleJump=true;
+        }
+    } else {
+        player.dy+=0.5;
+        player.y+=player.dy;
+        if(player.y<0) player.y=0;
+        if(player.y+player.size>canvas.height) player.y=canvas.height-player.size;
+    }
+
+    // ===== DRAW PLAYER =====
+    ctx.fillStyle = player.shield?'#0ff':'#4caf50';
+    ctx.fillRect(player.x,player.y,player.size,player.size);
+
+    // ===== MOVE OBSTACLES =====
+    for(let i=0;i<obstacles.length;i++){
+        obstacles[i].x-=speed;
+        ctx.fillStyle='#f44336';
+        ctx.fillRect(obstacles[i].x,obstacles[i].y,obstacles[i].w,obstacles[i].h);
+        // COLLISION
+        if(player.x<obstacles[i].x+obstacles[i].w &&
+           player.x+player.size>obstacles[i].x &&
+           player.y<obstacles[i].y+obstacles[i].h &&
+           player.y+player.size>obstacles[i].y){
+               if(!player.shield){
+                   gameOver=true;
+                   alert('Game Over! Score: '+score);
+                   location.reload();
+               }
+        }
+    }
+
+    // ===== PORTALS =====
+    portals.forEach(p=>{
+        if(!p.triggered && player.x+player.size>p.x){
+            p.triggered=true;
+            if(p.type==='UFO') player.mode='UFO';
+            if(p.type==='END') { alert('Level Complete! Score:'+score); location.reload(); }
+        }
+        ctx.beginPath();
+        ctx.arc(p.x-player.x+player.x,canvas.height-50,15,0,Math.PI*2);
+        ctx.fillStyle=(p.type==='UFO')?'#00f':'#ff0';
+        ctx.fill();
+    });
+
+    // ===== ORBS =====
+    orbs.forEach(o=>{
+        ctx.beginPath();
+        ctx.arc(o.x-player.x+player.x,o.y,10,0,Math.PI*2);
+        ctx.fillStyle='#ff0';
+        ctx.fill();
+        // collision
+        if(player.x<o.x+10 && player.x+player.size>o.x-10 &&
+           player.y<o.y+10 && player.y+player.size>o.y-10){
+               if(o.type==='jump') player.dy=player.jump;
+        }
+    });
+
+    // ===== DISTANCE & SCORE =====
+    distance+=speed;
+    score++;
+    let prog=Math.min(100,Math.floor(distance/levelLength*100));
+    document.getElementById('ui').innerText='Score: '+score+' | Progress: '+prog+'%';
+
+    requestAnimationFrame(update);
+}
+update();
+
+// ===== EDITOR MODE =====
+canvas.addEventListener('click', e=>{
+    if(!editorMode) return;
+    let rect=canvas.getBoundingClientRect();
+    let mx=e.clientX-rect.left+distance;
+    let my=e.clientY-rect.top;
+    if(e.shiftKey){
+        // remove obstacle
+        obstacles=obstacles.filter(o=>!(mx>o.x && mx<o.x+o.w && my>o.y && my<o.y+o.h));
+    } else {
+        // add obstacle
+        addObstacle(mx,30);
+    }
+});
+</script>
+</body>
+</html>
