@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mini Dash</title>
+<style>
+html,body{margin:0;padding:0;background:#0b1020;color:white;font-family:Arial;overflow:hidden}
+canvas{display:block;margin:auto}
+button{background:#1c2744;color:white;border:1px solid #3af;padding:6px 10px;margin:4px;border-radius:6px;cursor:pointer}
+#menu,#editorUI,#hud,#complete,#progressBox{position:absolute;left:0;right:0;text-align:center}
+#menu{top:40px}
+#editorUI{top:10px;left:10px;text-align:left}
+#hud{top:10px}
+#complete{top:200px;font-size:40px;display:none}
+#progressBox{top:300px;display:none}
+</style>
+</head>
+<body>
+
+<div id="menu">
+<h1>WELCOME TO MINI DASH</h1>
+<div id="levels"></div>
+<button onclick="document.getElementById('colorPicker').click()">Change Color</button>
+<input type="color" id="colorPicker" style="display:none">
+<button onclick="startEditor()">Level Editor</button>
+</div>
+
+<div id="editorUI" style="display:none">
+<b>LEVEL EDITOR</b><br>
+<button onclick="tool='block'">Block</button>
+<button onclick="tool='spike'">Spike</button>
+<button onclick="tool='pad'">Jump Pad</button>
+<button onclick="tool='portalYellow'">Yellow Portal</button>
+<button onclick="tool='portalGreen'">Green Portal</button>
+<button onclick="tool='erase'">Erase</button><br><br>
+<button onclick="playCustom()">Play Custom</button>
+</div>
+
+<div id="hud"></div>
+<div id="complete">LEVEL COMPLETE!</div>
+<div id="progressBox"></div>
+
+<canvas id="game" width="1000" height="450"></canvas>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+let mode="menu",tool="block",levelIndex=0;
+let scroll=0,speed=4,levelEnd=9000;
+let completed=false;
+
+const player={x:150,y:300,v:0,size:26,grounded:false,ship:false,color:"#6cf"};
+
+document.getElementById("colorPicker").addEventListener("input",e=>{
+ player.color = e.target.value; // fixed color changing
+});
+
+const levels=[
+ {name:"Neon Warmup",data:[]},
+ {name:"Pulse Runner",data:[]},
+ {name:"Quantum Hop",data:[]},
+ {name:"Chromatic Caverns",data:[]},
+ {name:"Drift Zone",data:[]}
+];
+
+levels.forEach((l,i)=>l.data=generateLevel(i));
+
+function generateLevel(seed){
+ let arr=[],x=300;
+ const yellowX=levelEnd*0.5;
+ const greenX=levelEnd*0.7;
+
+ for(;x<levelEnd;x+=160){
+  arr.push({x,y:360,w:140,h:20,type:"block"});
+
+  if(Math.random()<0.35){
+   // Neon Warmup easier spikes
+   if(seed===0){
+    arr.push({x:x+60,y:340,w:30,h:20,type:"spike"});
+   } else {
+    arr.push({x:x+60,y:330,w:40,h:30,type:"spike"});
+   }
+  }
+
+  if(Math.random()<0.5)
+   arr.push({x:x+90,y:300,w:30,h:15,type:"pad"});
+ }
+
+ for(let i=yellowX;i<greenX;i+=160){
+  arr.push({x:i,y:220,w:40,h:40,type:"spike"});
+  arr.push({x:i,y:360,w:40,h:40,type:"spike"});
+ }
+
+ arr.push({x:yellowX,y:180,w:120,h:160,type:"portalYellow"});
+ arr.push({x:greenX,y:180,w:120,h:160,type:"portalGreen"});
+
+ return arr;
+}
+
+function saveProgress(i,p){
+ localStorage.setItem("level"+i,Math.max(p,getProgress(i)));
+}
+function getProgress(i){
+ return Number(localStorage.getItem("level"+i)||0);
+}
+
+function addButtons(){
+ const div=document.getElementById("levels");
+ levels.forEach((l,i)=>{
+  const b=document.createElement("button");
+  b.innerText=l.name;
+  b.onclick=()=>startLevel(i);
+
+  const p=document.createElement("div");
+  p.innerHTML=`<button onclick="showProgress(${i})">See your progression</button>`;
+
+  div.appendChild(b);
+  div.appendChild(p);
+ });
+}
+addButtons();
+
+function showProgress(i){
+ progressBox.style.display="block";
+ progressBox.innerText=`Best: ${getProgress(i)}%`;
+ setTimeout(()=>progressBox.style.display="none",2000);
+}
+
+function startLevel(i){
+ levelIndex=i;
+ reset();
+ mode="play";
+ menu.style.display="none";
+}
+
+function startEditor(){
+ reset();
+ levels[levelIndex].data=[];
+ mode="editor";
+ menu.style.display="none";
+ editorUI.style.display="block";
+}
+
+function playCustom(){
+ reset();
+ mode="play";
+ editorUI.style.display="none";
+}
+
+function reset(){
+ scroll=0;
+ completed=false;
+ player.y=300;
+ player.v=0;
+ player.ship=false;
+ player.grounded=false;
+ complete.style.display="none";
+}
+
+document.addEventListener("keydown",e=>{
+ if(e.code==="Space"&&mode==="play"){
+  if(player.ship) player.v=-8;
+  else if(player.grounded){
+   player.v=-13;
+   player.grounded=false;
+  }
+ }
+});
+
+function update(){
+ ctx.fillStyle="#0b1020";
+ ctx.fillRect(0,0,canvas.width,canvas.height);
+
+ if(mode==="play"&&!completed){
+  player.v+=player.ship?0.6:0.7;
+  player.y+=player.v;
+  scroll+=speed;
+ }
+
+ if(player.y+player.size>360){
+  player.y=360-player.size;
+  player.v=0;
+  player.grounded=true;
+ }
+
+ levels[levelIndex].data.forEach(o=>{
+  const dx=o.x-scroll;
+
+  if(o.type==="block"){
+   ctx.strokeStyle="#3af";
+   ctx.strokeRect(dx,o.y,o.w,o.h);
+   if(hit(o)&&player.v>=0){
+    player.y=o.y-player.size;
+    player.v=0;
+    player.grounded=true;
+   }
+  }
+
+  if(o.type==="spike"){
+
+   let spikeWidth=o.w;
+   let spikeHeight=o.h;
+
+   // widen spikes when flying
+   if(player.ship){
+    spikeWidth = o.w * 1.6;
+   }
+
+   ctx.fillStyle="#9ff";
+   ctx.beginPath();
+   ctx.moveTo(dx,o.y+spikeHeight);
+   ctx.lineTo(dx+spikeWidth/2,o.y);
+   ctx.lineTo(dx+spikeWidth,o.y+spikeHeight);
+   ctx.fill();
+
+   // collision using widened width
+   if(player.x<o.x+spikeWidth-scroll &&
+      player.x+player.size>o.x-scroll &&
+      player.y<o.y+spikeHeight &&
+      player.y+player.size>o.y){
+        reset();
+   }
+  }
+
+  if(o.type==="pad"){
+   ctx.fillStyle="yellow";
+   ctx.fillRect(dx,o.y,o.w,o.h);
+   if(hit(o)) player.v=-18;
+  }
+
+  if(o.type==="portalYellow"){
+   ctx.fillStyle="yellow";
+   ctx.fillRect(dx,o.y,o.w,o.h);
+   if(player.x+player.size>dx && player.x<dx+o.w){
+     player.ship=true;
+     player.v=0;
+   }
+  }
+
+  if(o.type==="portalGreen"){
+   ctx.fillStyle="#00ff6a";
+   ctx.fillRect(dx,o.y,o.w,o.h);
+   if(player.x>dx+o.w){
+     player.ship=false;
+     player.v=0;
+   }
+  }
+ });
+
+ let percent=Math.min(100,Math.floor(scroll/levelEnd*100));
+ hud.innerText=percent+"%";
+ saveProgress(levelIndex,percent);
+
+ if(scroll>=levelEnd&&!completed){
+  completed=true;
+  complete.style.display="block";
+  setTimeout(()=>{
+   mode="menu";
+   menu.style.display="block";
+  },2000);
+ }
+
+ if(mode==="play") drawPlayer();
+ requestAnimationFrame(update);
+}
+
+function hit(o){
+ return player.x<o.x+o.w-scroll &&
+        player.x+player.size>o.x-scroll &&
+        player.y<o.y+o.h &&
+        player.y+player.size>o.y;
+}
+
+function drawPlayer(){
+ ctx.save();
+ ctx.translate(player.x+13,player.y+13);
+ ctx.rotate(Math.PI/4);
+ ctx.fillStyle=player.color;
+ ctx.fillRect(-13,-13,26,26);
+ ctx.restore();
+}
+
+update();
+</script>
+</body>
+</html>
