@@ -44,31 +44,41 @@ button{background:#1c2744;color:white;border:1px solid #3af;padding:6px 10px;mar
 
 
 <script>
-const canvas=document.getElementById("game");
-const ctx=canvas.getContext("2d");
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-let mode="menu";
-let levelIndex=0;
-let scroll=0;
-let speed=4;
-let levelEnd=9000;
+let mode="menu", levelIndex=0;
+let scroll=0, speed=4, levelEnd=9000;
 let completed=false;
+
+let bestProgress=[0,0,0,0,0];
+let tunnelActive=false;
 
 const menu=document.getElementById("menu");
 const hud=document.getElementById("hud");
 const complete=document.getElementById("complete");
 
 const player={
- x:150,y:300,v:0,size:26,
- grounded:false,ship:false,
+ x:150,
+ y:300,
+ v:0,
+ size:26,
+ grounded:false,
+ ship:false,
  color:"#6cf"
 };
 
+/* ================= COLOR ================= */
+
 const colorPicker=document.getElementById("colorPicker");
-colorPicker.value=player.color;
-colorPicker.addEventListener("input",e=>{
- player.color=e.target.value;
-});
+if(colorPicker){
+ colorPicker.value=player.color;
+ colorPicker.addEventListener("input",e=>{
+  player.color=e.target.value;
+ });
+}
+
+/* ================= LEVELS ================= */
 
 const levels=[
  {name:"Neon Warmup",data:[]},
@@ -82,115 +92,83 @@ levels.forEach((l,i)=>l.data=generateLevel());
 
 function generateLevel(){
  let arr=[],x=300;
- for(;x<levelEnd;x+=180){
+
+ const yellowX=levelEnd*0.5;
+ const greenX=levelEnd*0.7;
+
+ for(;x<levelEnd;x+=160){
   arr.push({x,y:360,w:140,h:20,type:"block"});
-  if(Math.random()<0.4)
+
+  if(Math.random()<0.35)
    arr.push({x:x+60,y:330,w:40,h:30,type:"spike"});
+
   if(Math.random()<0.5)
    arr.push({x:x+90,y:300,w:30,h:15,type:"pad"});
  }
- arr.push({x:levelEnd*0.5,y:180,w:120,h:160,type:"portalYellow"});
- arr.push({x:levelEnd*0.7,y:180,w:120,h:160,type:"portalGreen"});
+
+ arr.push({x:yellowX,y:180,w:120,h:160,type:"portalYellow"});
+ arr.push({x:greenX,y:180,w:120,h:160,type:"portalGreen"});
+
  return arr;
 }
 
-/* =====================
-   LEVEL EDITOR SYSTEM
-===================== */
-
-let editorObjects=[];
-let tool="spike";
-
-function openEditor(){
- mode="editor";
- menu.style.display="none";
- scroll=0;
-}
-
-function playCustom(){
- mode="custom";
- scroll=0;
- player.y=300;
- player.v=0;
- player.ship=false;
-}
-
-canvas.addEventListener("click",e=>{
- if(mode!=="editor") return;
-
- const rect=canvas.getBoundingClientRect();
- const x=e.clientX-rect.left+scroll;
-
- if(tool==="spike")
-  editorObjects.push({x,y:330,w:40,h:30,type:"spike"});
-
- if(tool==="pad")
-  editorObjects.push({x,y:300,w:30,h:15,type:"pad"});
-
- if(tool==="portalYellow")
-  editorObjects.push({x,y:180,w:120,h:160,type:"portalYellow"});
-
- if(tool==="portalGreen")
-  editorObjects.push({x,y:180,w:120,h:160,type:"portalGreen"});
-
- if(tool==="erase"){
-  editorObjects=editorObjects.filter(o=>!(x>o.x && x<o.x+o.w));
- }
-});
-
-/* =====================
-   MENU BUTTONS
-===================== */
+/* ================= MENU BUTTONS ================= */
 
 function addButtons(){
  const div=document.getElementById("levels");
+ if(!div) return;
  div.innerHTML="";
- levels.forEach((l,i)=>{
-  const b=document.createElement("button");
-  b.innerText=l.name;
-  b.onclick=()=>startLevel(i);
-  div.appendChild(b);
+
+ levels.forEach((level,index)=>{
+  const playBtn=document.createElement("button");
+  playBtn.innerText=level.name;
+  playBtn.onclick=()=>startLevel(index);
+  div.appendChild(playBtn);
+
+  const progBtn=document.createElement("button");
+  progBtn.innerText="See your progression";
+  progBtn.onclick=()=>{
+   alert("Best: "+bestProgress[index]+"%");
+  };
+  div.appendChild(progBtn);
  });
 }
-
 addButtons();
 
 function startLevel(i){
  levelIndex=i;
  mode="play";
  menu.style.display="none";
+ complete.style.display="none";
  reset();
 }
+
+/* ================= RESET ================= */
 
 function reset(){
  scroll=0;
  completed=false;
+ tunnelActive=false;
  player.y=300;
  player.v=0;
  player.ship=false;
  player.grounded=false;
 }
 
-/* =====================
-   INPUT
-===================== */
+/* ================= INPUT ================= */
 
 document.addEventListener("keydown",e=>{
- if(e.code==="Space"){
-  if(mode==="editor"){
-   playCustom();
-  } else if((mode==="play"||mode==="custom")&&player.grounded){
+ if(e.code==="Space"&&mode==="play"){
+  if(player.ship){
+   player.v=-8;
+  } else if(player.grounded){
    player.v=-13;
    player.grounded=false;
-  } else if((mode==="play"||mode==="custom")&&player.ship){
-   player.v=-8;
   }
  }
 });
 
-/* =====================
-   DRAW HELPERS
-===================== */
+/* ================= DRAW PORTAL ================= */
 
 function drawRingPortal(x,y,color){
  ctx.save();
@@ -206,12 +184,16 @@ function drawRingPortal(x,y,color){
  ctx.restore();
 }
 
+/* ================= COLLISION ================= */
+
 function hit(o){
  return player.x<o.x+o.w-scroll &&
         player.x+player.size>o.x-scroll &&
         player.y<o.y+o.h &&
         player.y+player.size>o.y;
 }
+
+/* ================= PLAYER ================= */
 
 function drawPlayer(){
  ctx.save();
@@ -222,83 +204,108 @@ function drawPlayer(){
  ctx.restore();
 }
 
-/* =====================
-   GAME LOOP
-===================== */
+/* ================= MAIN LOOP ================= */
 
 function update(){
  ctx.fillStyle="#0b1020";
  ctx.fillRect(0,0,canvas.width,canvas.height);
 
- // ground
- ctx.fillStyle="#111a30";
- ctx.fillRect(0,360,canvas.width,100);
-
- if(mode==="editor"){
-  editorObjects.forEach(o=>drawObject(o,o.x-scroll));
- }
-
- if(mode==="play"||mode==="custom"){
+ if(mode==="play"&&!completed){
   player.v+=player.ship?0.6:0.7;
   player.y+=player.v;
   scroll+=speed;
-
-  if(player.y+player.size>360){
-   player.y=360-player.size;
-   player.v=0;
-   player.grounded=true;
-  }
-
-  const objects=(mode==="custom")?editorObjects:levels[levelIndex].data;
-
-  objects.forEach(o=>{
-   drawObject(o,o.x-scroll);
-
-   if(hit(o)){
-    if(o.type==="spike") reset();
-    if(o.type==="pad") player.v=-18;
-    if(o.type==="portalYellow") player.ship=true;
-    if(o.type==="portalGreen") player.ship=false;
-   }
-  });
-
-  if(scroll>=levelEnd&&!completed){
-   completed=true;
-   complete.innerText="Level Complete!";
-   complete.style.display="block";
-   setTimeout(()=>{
-    mode="menu";
-    menu.style.display="block";
-    complete.style.display="none";
-   },2000);
-  }
-
-  drawPlayer();
  }
+
+ if(player.y+player.size>360){
+  player.y=360-player.size;
+  player.v=0;
+  player.grounded=true;
+ }
+
+ levels[levelIndex].data.forEach(o=>{
+  const dx=o.x-scroll;
+
+  if(o.type==="block"){
+   ctx.strokeStyle="#3af";
+   ctx.strokeRect(dx,o.y,o.w,o.h);
+   if(hit(o)&&player.v>=0){
+    player.y=o.y-player.size;
+    player.v=0;
+    player.grounded=true;
+   }
+  }
+
+  if(o.type==="spike"){
+   ctx.fillStyle="#9ff";
+   ctx.beginPath();
+   ctx.moveTo(dx,o.y+o.h);
+   ctx.lineTo(dx+o.w/2,o.y);
+   ctx.lineTo(dx+o.w,o.y+o.h);
+   ctx.fill();
+   if(hit(o)) reset();
+  }
+
+  if(o.type==="pad"){
+   ctx.fillStyle="yellow";
+   ctx.fillRect(dx,o.y,o.w,o.h);
+   if(hit(o)) player.v=-18;
+  }
+
+  if(o.type==="portalYellow"){
+   drawRingPortal(dx,o.y,"#ff00cc");
+   if(hit(o)){
+    player.ship=true;
+    tunnelActive=true;
+
+    // AIR SPIKE TUNNEL
+    for(let i=0;i<20;i++){
+     levels[levelIndex].data.push({
+      x:o.x+200+i*200,
+      y:200,
+      w:50,
+      h:50,
+      type:"spike"
+     });
+     levels[levelIndex].data.push({
+      x:o.x+200+i*200,
+      y:320,
+      w:50,
+      h:50,
+      type:"spike"
+     });
+    }
+   }
+  }
+
+  if(o.type==="portalGreen"){
+   drawRingPortal(dx,o.y,"#00ffee");
+   if(hit(o)){
+    player.ship=false;
+    tunnelActive=false;
+   }
+  }
+ });
+
+ let percent=Math.min(100,Math.floor(scroll/levelEnd*100));
+ hud.innerText=percent+"%";
+
+ if(percent>bestProgress[levelIndex])
+  bestProgress[levelIndex]=percent;
+
+ if(scroll>=levelEnd&&!completed){
+  completed=true;
+  complete.innerText="Level Complete!";
+  complete.style.display="block";
+  setTimeout(()=>{
+   mode="menu";
+   menu.style.display="block";
+   complete.style.display="none";
+  },2000);
+ }
+
+ if(mode==="play") drawPlayer();
 
  requestAnimationFrame(update);
-}
-
-function drawObject(o,dx){
- if(o.type==="spike"){
-  ctx.fillStyle="#9ff";
-  ctx.beginPath();
-  ctx.moveTo(dx,o.y+o.h);
-  ctx.lineTo(dx+o.w/2,o.y);
-  ctx.lineTo(dx+o.w,o.y+o.h);
-  ctx.fill();
- }
-
- if(o.type==="pad"){
-  ctx.fillStyle="yellow";
-  ctx.fillRect(dx,o.y,o.w,o.h);
- }
-
- if(o.type==="portalYellow")
-  drawRingPortal(dx,o.y,"#ff00cc");
-
- if(o.type==="portalGreen")
-  drawRingPortal(dx,o.y,"#00ffee");
 }
 
 update();
