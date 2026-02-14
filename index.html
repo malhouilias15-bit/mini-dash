@@ -224,6 +224,29 @@ function update(){
     }
   }
  }
+// ---------- LEVEL BUTTON CREATOR ----------
+function addButtons(){
+    const div = document.getElementById("levels");
+    if(!div) return;
+
+    div.innerHTML = "";
+
+    levels.forEach((level, index) => {
+
+        const playBtn = document.createElement("button");
+        playBtn.innerText = level.name;
+        playBtn.onclick = () => startLevel(index);
+        div.appendChild(playBtn);
+
+        const progBtn = document.createElement("button");
+        progBtn.innerText = "See your progression";
+        progBtn.onclick = () => showProgress(index);
+        div.appendChild(progBtn);
+    });
+}
+
+// Call it when page loads
+addButtons();
 
  // 💥 death animation
  if(deathActive){
