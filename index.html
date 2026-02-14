@@ -197,22 +197,23 @@ function update(){
    if(hit(o)) player.v=-18;
   }
 
-  if(o.type==="portalYellow"){
-   drawPortal(dx,o.y,"#ff00cc");
-   if(hit(o)&&!tunnelActive){
-     player.ship=true;
-     portalDelay=120; // 2 seconds
-     tunnelActive=true;
-   }
-  }
+ if(o.type==="portalYellow"){
+ drawRingPortal(dx,o.y,"#ff00cc");
+
+ if(hit(o)){
+   player.ship=true;
+ }
+}
+     
 
   if(o.type==="portalGreen"){
-   drawPortal(dx,o.y,"#00ffee");
-   if(hit(o)){
-     player.ship=false;
-   }
-  }
- });
+ drawRingPortal(dx,o.y,"#00ffee");
+
+ if(hit(o)){
+   player.ship=false;
+ }
+}
+
 
  // ⏳ delay before tunnel
  if(portalDelay>0){
@@ -293,6 +294,22 @@ function drawPlayer(){
  ctx.rotate(Math.PI/4);
  ctx.fillStyle=player.color;
  ctx.fillRect(-13,-13,26,26);
+ ctx.restore();
+}
+function drawRingPortal(x,y,color){
+ ctx.save();
+ ctx.translate(x+60,y+80);
+
+ ctx.strokeStyle=color;
+ ctx.lineWidth=16;
+ ctx.beginPath();
+ ctx.arc(0,0,55,0,Math.PI*2);
+ ctx.stroke();
+
+ ctx.lineWidth=6;
+ ctx.strokeStyle="black";
+ ctx.stroke();
+
  ctx.restore();
 }
 
