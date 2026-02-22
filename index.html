@@ -52,14 +52,13 @@ let scroll=0, speed=4, levelEnd=9000;
 let completed=false;
 
 let bestProgress=[0,0,0,0,0];
+let winAnim=false;
+let winRotation=0;
+let waveMode=false;
 
 const menu=document.getElementById("menu");
 const hud=document.getElementById("hud");
 const complete=document.getElementById("complete");
-const editorUI=document.getElementById("editorUI");
-
-let tool="block";
-let customLevel=[];
 
 const player={
  x:150,
@@ -68,20 +67,17 @@ const player={
  size:26,
  grounded:false,
  ship:false,
- wave:false,
- orbReady:false,
+ canOrb:false,
  color:"#6cf"
 };
 
 /* ================= COLOR ================= */
 
 const colorPicker=document.getElementById("colorPicker");
-if(colorPicker){
- colorPicker.value=player.color;
- colorPicker.addEventListener("input",e=>{
-  player.color=e.target.value;
- });
-}
+colorPicker.value=player.color;
+colorPicker.addEventListener("input",e=>{
+ player.color=e.target.value;
+});
 
 /* ================= LEVELS ================= */
 
@@ -93,36 +89,57 @@ const levels=[
  {name:"Drift Zone",data:[]}
 ];
 
-levels.forEach((l,i)=>l.data=generateLevel());
+levels.forEach((l,i)=>{
+ levelIndex=i;
+ l.data=generateLevel();
+});
+levelIndex=0;
 
 function generateLevel(){
  let arr=[],x=300;
 
- const yellowX=levelEnd*0.5;
- const greenX=levelEnd*0.7;
-
  for(;x<levelEnd;x+=160){
+
   arr.push({x,y:360,w:140,h:20,type:"block"});
 
-  if(Math.random()<0.35)
-   arr.push({x:x+60,y:330,w:40,h:30,type:"spike"});
+  // RANDOM SPIKES
+  if(Math.random()<0.3)
+    arr.push({x:x+60,y:330,w:40,h:30,type:"spike"});
 
-  if(Math.random()<0.2)
-   arr.push({x:x+60,y:330,w:80,h:30,type:"doubleSpike"});
+  if(Math.random()<0.15){
+    // double spike
+    arr.push({x:x+40,y:330,w:40,h:30,type:"spike"});
+    arr.push({x:x+80,y:330,w:40,h:30,type:"spike"});
+  }
 
-  if(Math.random()<0.1)
-   arr.push({x:x+60,y:330,w:120,h:30,type:"tripleSpike"});
-
-  if(Math.random()<0.5)
-   arr.push({x:x+90,y:300,w:30,h:15,type:"pad"});
+  if(Math.random()<0.08){
+    // triple spike
+    arr.push({x:x+30,y:330,w:40,h:30,type:"spike"});
+    arr.push({x:x+70,y:330,w:40,h:30,type:"spike"});
+    arr.push({x:x+110,y:330,w:40,h:30,type:"spike"});
+  }
 
   if(Math.random()<0.3)
-   arr.push({x:x+120,y:260,w:20,h:20,type:"orb"});
+    arr.push({x:x+90,y:300,w:30,h:15,type:"pad"});
+
+  if(Math.random()<0.25)
+    arr.push({x:x+100,y:250,w:20,h:20,type:"orb"});
  }
 
- arr.push({x:yellowX,y:180,w:120,h:160,type:"portalYellow"});
- arr.push({x:greenX,y:180,w:120,h:160,type:"portalGreen"});
- arr.push({x:yellowX-500,y:180,w:120,h:160,type:"portalWave"});
+ // portals
+ arr.push({x:levelEnd*0.5,y:180,w:120,h:160,type:"portalYellow"});
+ arr.push({x:levelEnd*0.7,y:180,w:120,h:160,type:"portalGreen"});
+
+ // wave portal only in Drift Zone
+ if(levelIndex===4){
+   arr.push({
+     x:levelEnd*0.6,
+     y:200,
+     w:100,
+     h:120,
+     type:"wavePortal"
+   });
+ }
 
  return arr;
 }
@@ -133,10 +150,10 @@ function addButtons(){
  const div=document.getElementById("levels");
  div.innerHTML="";
  levels.forEach((level,index)=>{
-  const b=document.createElement("button");
-  b.innerText=level.name;
-  b.onclick=()=>startLevel(index);
-  div.appendChild(b);
+  const btn=document.createElement("button");
+  btn.innerText=level.name;
+  btn.onclick=()=>startLevel(index);
+  div.appendChild(btn);
  });
 }
 addButtons();
@@ -145,32 +162,7 @@ function startLevel(i){
  levelIndex=i;
  mode="play";
  menu.style.display="none";
- editorUI.style.display="none";
- reset();
-}
-
-/* ================= EDITOR ================= */
-
-function startEditor(){
- mode="editor";
- menu.style.display="none";
- editorUI.style.display="block";
- customLevel=[];
- scroll=0;
-}
-
-canvas.addEventListener("click",e=>{
- if(mode!=="editor") return;
-
- const rect=canvas.getBoundingClientRect();
- const x=e.clientX-rect.left+scroll;
-
- customLevel.push({x,y:330,w:40,h:30,type:tool});
-});
-
-function playCustom(){
- mode="custom";
- editorUI.style.display="none";
+ complete.style.display="none";
  reset();
 }
 
@@ -179,69 +171,43 @@ function playCustom(){
 function reset(){
  scroll=0;
  completed=false;
+ winAnim=false;
+ winRotation=0;
+ waveMode=false;
+ speed=4;
+
  player.y=300;
  player.v=0;
  player.ship=false;
- player.wave=false;
  player.grounded=false;
 }
 
 /* ================= INPUT ================= */
 
 document.addEventListener("keydown",e=>{
- if(e.code==="Space"){
-  if(player.wave){
-   player.v*=-1;
+ if(e.code==="Space"&&mode==="play"){
+
+  if(waveMode){
+   player.v=-10;
   }
+
   else if(player.ship){
    player.v=-8;
   }
-  else if(player.orbReady){
-   player.v=-18;
-   player.orbReady=false;
-  }
+
   else if(player.grounded){
    player.v=-13;
    player.grounded=false;
   }
+
+  else if(player.canOrb){
+   player.v=-16;
+   player.canOrb=false;
+  }
  }
 });
 
-/* ================= DRAW ================= */
-
-function drawRingPortal(x,y,color){
- ctx.save();
- ctx.translate(x+60,y+80);
- ctx.strokeStyle=color;
- ctx.lineWidth=16;
- ctx.beginPath();
- ctx.arc(0,0,55,0,Math.PI*2);
- ctx.stroke();
- ctx.restore();
-}
-
-function drawSpike(x,y,w){
- ctx.beginPath();
- ctx.moveTo(x,y+30);
- ctx.lineTo(x+w/2,y);
- ctx.lineTo(x+w,y+30);
- ctx.fill();
-}
-
-function drawPlayer(){
- ctx.save();
- ctx.translate(player.x+13,player.y+13);
-
- if(player.wave){
-  ctx.rotate(player.v>0?0.5:-0.5);
- }else{
-  ctx.rotate(Math.PI/4);
- }
-
- ctx.fillStyle=player.color;
- ctx.fillRect(-13,-13,26,26);
- ctx.restore();
-}
+/* ================= COLLISION ================= */
 
 function hit(o){
  return player.x<o.x+o.w-scroll &&
@@ -250,21 +216,49 @@ function hit(o){
         player.y+player.size>o.y;
 }
 
+/* ================= PLAYER ================= */
+
+function drawPlayer(){
+ ctx.save();
+ ctx.translate(player.x+13,player.y+13);
+
+ if(winAnim){
+   winRotation+=0.2;
+   ctx.rotate(winRotation);
+   if(winRotation>=Math.PI*2){
+     winAnim=false;
+     complete.innerText="Level Complete!";
+     complete.style.display="block";
+     setTimeout(()=>{
+       mode="menu";
+       menu.style.display="block";
+       complete.style.display="none";
+       winRotation=0;
+     },2000);
+   }
+ } else {
+   ctx.rotate(Math.PI/4);
+ }
+
+ ctx.fillStyle=player.color;
+ ctx.fillRect(-13,-13,26,26);
+ ctx.restore();
+}
+
 /* ================= MAIN LOOP ================= */
 
 function update(){
+
  ctx.fillStyle="#0b1020";
  ctx.fillRect(0,0,canvas.width,canvas.height);
 
- let objects = (mode==="custom")?customLevel:levels[levelIndex].data;
+ // GREEN GROUND
+ ctx.fillStyle="#00ff66";
+ ctx.fillRect(0,360,canvas.width,90);
 
- if(mode==="play"||mode==="custom"){
-  if(player.wave){
-   player.y+=player.v;
-  }else{
-   player.v+=player.ship?0.6:0.7;
-   player.y+=player.v;
-  }
+ if(mode==="play"&&!completed){
+  player.v+= waveMode ? 0.5 : (player.ship?0.6:0.7);
+  player.y+=player.v;
   scroll+=speed;
  }
 
@@ -274,59 +268,87 @@ function update(){
   player.grounded=true;
  }
 
- objects.forEach(o=>{
+ levels[levelIndex].data.forEach(o=>{
   const dx=o.x-scroll;
 
-  ctx.fillStyle="#9ff";
-
-  if(o.type==="spike") drawSpike(dx,o.y,40);
-  if(o.type==="doubleSpike"){
-   drawSpike(dx,o.y,40);
-   drawSpike(dx+40,o.y,40);
+  if(o.type==="block"){
+   ctx.strokeStyle="#3af";
+   ctx.strokeRect(dx,o.y,o.w,o.h);
+   if(hit(o)&&player.v>=0){
+    player.y=o.y-player.size;
+    player.v=0;
+    player.grounded=true;
+   }
   }
-  if(o.type==="tripleSpike"){
-   drawSpike(dx,o.y,40);
-   drawSpike(dx+40,o.y,40);
-   drawSpike(dx+80,o.y,40);
+
+  if(o.type==="spike"){
+   ctx.fillStyle="#9ff";
+   ctx.beginPath();
+   ctx.moveTo(dx,o.y+o.h);
+   ctx.lineTo(dx+o.w/2,o.y-10);
+   ctx.lineTo(dx+o.w,o.y+o.h);
+   ctx.fill();
+   if(hit(o)) reset();
   }
 
   if(o.type==="pad"){
    ctx.fillStyle="yellow";
-   ctx.fillRect(dx,o.y,30,15);
+   ctx.fillRect(dx,o.y,o.w,o.h);
+   if(hit(o)) player.v=-18;
   }
 
   if(o.type==="orb"){
-   ctx.fillStyle="#ff66ff";
+   ctx.fillStyle="#00ffff";
    ctx.beginPath();
    ctx.arc(dx+10,o.y+10,10,0,Math.PI*2);
    ctx.fill();
-   if(hit(o)) player.orbReady=true;
+   if(hit(o)){
+     player.canOrb=true;
+   }
   }
 
   if(o.type==="portalYellow"){
-   drawRingPortal(dx,o.y,"#ff00cc");
-   if(hit(o)){ player.ship=true; }
+   ctx.strokeStyle="#ff00cc";
+   ctx.strokeRect(dx,o.y,o.w,o.h);
+   if(hit(o)){
+     player.ship=true;
+   }
   }
 
   if(o.type==="portalGreen"){
-   drawRingPortal(dx,o.y,"#00ffee");
-   if(hit(o)){ player.ship=false; player.wave=false; }
+   ctx.strokeStyle="#00ffee";
+   ctx.strokeRect(dx,o.y,o.w,o.w);
+   if(hit(o)){
+     player.ship=false;
+   }
   }
 
-  if(o.type==="portalWave"){
-   drawRingPortal(dx,o.y,"white");
-   if(hit(o)){ player.wave=true; player.ship=false; player.v=4; }
+  if(o.type==="wavePortal"){
+   ctx.fillStyle="#ff55ff";
+   ctx.fillRect(dx,o.y,o.w,o.h);
+   if(hit(o)){
+     waveMode=true;
+     speed=6;
+   }
   }
-
-  if((o.type.includes("Spike")) && hit(o)) reset();
  });
 
- hud.innerText=Math.floor(scroll/levelEnd*100)+"%";
+ let percent=Math.min(100,Math.floor(scroll/levelEnd*100));
+ hud.innerText=percent+"%";
 
- if(mode==="play"||mode==="custom") drawPlayer();
+ if(percent>bestProgress[levelIndex])
+  bestProgress[levelIndex]=percent;
+
+ if(scroll>=levelEnd&&!completed){
+  completed=true;
+  winAnim=true;
+ }
+
+ if(mode==="play") drawPlayer();
 
  requestAnimationFrame(update);
 }
 
 update();
 </script>
+
