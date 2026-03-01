@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Neon Dash</title>
+<style>
+body { margin:0; background:black; overflow:hidden; }
+canvas { display:block; background:#111; }
+#ui {
+    position:fixed;
+    top:10px;
+    left:10px;
+    color:white;
+    font-family:Arial;
+}
+button {
+    margin:2px;
+    padding:5px 10px;
+}
+</style>
+</head>
+<body>
+<div id="ui">
+<button onclick="loadLevel('neon')">Neon Warmup</button>
+<button onclick="loadLevel('pulse')">Pulse Runner</button>
+<button onclick="loadLevel('drift')">Drift Zone</button>
+<button onclick="loadLevel('chromatic')">Chromatic</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let gravity = 0.8;
+let mode = "cube";
+let player = {
+    x:150,
+    y:300,
+    size:30,
+    dy:0,
+    onGround:false,
+    color:"#00ffff"
+};
+
+let obstacles = [];
+let portals = [];
+let orbs = [];
+
+function resetPlayer(){
+    player.y = 300;
+    player.dy = 0;
+    mode = "cube";
+}
+
+function loadLevel(name){
+    obstacles = [];
+    portals = [];
+    orbs = [];
+    resetPlayer();
+
+    if(name==="neon"){
+        obstacles.push({x:500,y:350,type:"spike"});
+        obstacles.push({x:550,y:350,type:"triple"});
+        portals.push({x:900,y:300,type:"ufo"});
+        orbs.push({x:700,y:250});
+    }
+
+    if(name==="pulse"){
+        obstacles.push({x:400,y:350,type:"spike"});
+        portals.push({x:600,y:300,type:"ship"});
+    }
+
+    if(name==="drift"){
+        obstacles.push({x:600,y:350,type:"triple"});
+        portals.push({x:850,y:300,type:"wave"});
+    }
+
+    if(name==="chromatic"){
+        obstacles.push({x:450,y:350,type:"spike"});
+        portals.push({x:700,y:300,type:"ufo"});
+    }
+}
+
+document.addEventListener("keydown", e=>{
+    if(e.code==="Space"){
+        if(mode==="cube" && player.onGround){
+            player.dy = -15;
+        }
+        if(mode==="ship"){
+            player.dy = -10;
+        }
+        if(mode==="ufo"){
+            player.dy = -12;
+        }
+        if(mode==="wave"){
+            player.dy = -15;
+        }
+    }
+});
+
+function update(){
+    player.dy += gravity;
+    player.y += player.dy;
+
+    if(player.y >= 350){
+        player.y = 350;
+        player.dy = 0;
+        player.onGround = true;
+    } else {
+        player.onGround = false;
+    }
+
+    obstacles.forEach(o=>{
+        o.x -= 5;
+        if(checkCollision(o)){
+            resetPlayer();
+        }
+    });
+
+    portals.forEach(p=>{
+        p.x -= 5;
+        if(checkCollision(p)){
+            mode = p.type;
+        }
+    });
+
+    orbs.forEach(o=>{
+        o.x -= 5;
+        if(checkCollision(o)){
+            player.dy = -18;
+        }
+    });
+}
+
+function checkCollision(obj){
+    return player.x < obj.x+30 &&
+           player.x+player.size > obj.x &&
+           player.y < obj.y+30 &&
+           player.y+player.size > obj.y;
+}
+
+function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // ground
+    ctx.fillStyle="#333";
+    ctx.fillRect(0,380,canvas.width,5);
+
+    // player
+    ctx.fillStyle=player.color;
+    if(mode==="cube"){
+        ctx.fillRect(player.x,player.y,player.size,player.size);
+    }
+    if(mode==="ship"){
+        ctx.beginPath();
+        ctx.moveTo(player.x,player.y);
+        ctx.lineTo(player.x+40,player.y+15);
+        ctx.lineTo(player.x,player.y+30);
+        ctx.fill();
+    }
+    if(mode==="ufo"){
+        ctx.beginPath();
+        ctx.arc(player.x+15,player.y+15,15,0,Math.PI*2);
+        ctx.fill();
+    }
+    if(mode==="wave"){
+        ctx.fillRect(player.x,player.y,20,20);
+    }
+
+    // obstacles
+    ctx.fillStyle="red";
+    obstacles.forEach(o=>{
+        if(o.type==="spike"){
+            ctx.beginPath();
+            ctx.moveTo(o.x,380);
+            ctx.lineTo(o.x+15,350);
+            ctx.lineTo(o.x+30,380);
+            ctx.fill();
+        }
+        if(o.type==="triple"){
+            for(let i=0;i<3;i++){
+                ctx.beginPath();
+                ctx.moveTo(o.x+i*20,380);
+                ctx.lineTo(o.x+10+i*20,350);
+                ctx.lineTo(o.x+20+i*20,380);
+                ctx.fill();
+            }
+        }
+    });
+
+    // portals
+    ctx.fillStyle="purple";
+    portals.forEach(p=>{
+        ctx.fillRect(p.x,p.y,30,60);
+    });
+
+    // orbs
+    ctx.fillStyle="yellow";
+    orbs.forEach(o=>{
+        ctx.beginPath();
+        ctx.arc(o.x+15,o.y+15,15,0,Math.PI*2);
+        ctx.fill();
+    });
+}
+
+function loop(){
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loadLevel("neon");
+loop();
+</script>
+</body>
+</html>
